@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Data Analyst — Triangle Information Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    /* ── Design tokens ────────────────────────────────────────────────── */
+    :root {
+      --blue:        #0057D4;
+      --blue-dark:   #0046AC;
+      --blue-mid:    #0063E8;
+      --blue-card:   #0049B8;
+      --blue-card2:  #003D9E;
+      --white:       #FFFFFF;
+      --white-90:    rgba(255,255,255,0.90);
+      --white-80:    rgba(255,255,255,0.80);
+      --white-60:    rgba(255,255,255,0.60);
+      --white-50:    rgba(255,255,255,0.50);
+      --white-25:    rgba(255,255,255,0.25);
+      --white-12:    rgba(255,255,255,0.12);
+      --white-08:    rgba(255,255,255,0.08);
+      --white-04:    rgba(255,255,255,0.04);
+      --teal:        #5CDFD8;
+      --amber:       #FFD166;
+      --purple:      #C4AAFF;
+      --green:       #69EFA0;
+      --red:         #FF6B6B;
+      --orange:      #F5A623;
+      --radius-sm:   6px;
+      --radius-md:   10px;
+      --radius-lg:   14px;
+    }
+
+    /* ── Reset ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Barlow", sans-serif;
+      background: var(--blue);
+      min-height: 100vh;
+      color: var(--white);
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────── */
+    #root { height: 100vh; display: flex; flex-direction: column; }
+
+    .app-layout {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 900px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 0 16px;
+    }
+
+    /* ── Top bar ──────────────────────────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--white-12);
+      flex-shrink: 0;
+    }
+    .topbar-logo { display: flex; align-items: center; gap: 10px; }
+    .logo-name { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+    .topbar-title {
+      font-size: 14px; font-weight: 600; color: var(--white-80);
+      margin-left: 6px; padding-left: 14px;
+      border-left: 1px solid var(--white-25);
+    }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .query-counter {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--white-50);
+      background: var(--white-08); border: 1px solid var(--white-12);
+      border-radius: 20px; padding: 4px 10px;
+    }
+    .query-counter.near-limit { color: var(--amber); border-color: rgba(255,209,102,0.3); background: rgba(255,209,102,0.08); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px rgba(105,239,160,0.6); }
+
+    /* ── Message feed ─────────────────────────────────────────────────── */
+    .feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      scroll-behavior: smooth;
+    }
+    .feed::-webkit-scrollbar { width: 4px; }
+    .feed::-webkit-scrollbar-thumb { background: var(--white-25); border-radius: 2px; }
+
+    /* ── Empty state ──────────────────────────────────────────────────── */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 32px 20px; gap: 16px;
+    }
+    .empty-icon { font-size: 40px; opacity: 0.35; }
+    .empty-title { font-size: 20px; font-weight: 700; color: var(--white-80); }
+    .empty-body  { font-size: 14px; color: var(--white-50); max-width: 360px; line-height: 1.65; }
+
+    /* ── Message rows ─────────────────────────────────────────────────── */
+    .msg-row { display: flex; flex-direction: column; gap: 5px; }
+    .msg-row.user  { align-items: flex-end; }
+    .msg-row.agent { align-items: flex-start; }
+    .msg-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--white-25); padding: 0 4px; }
+
+    /* ── Bubbles ──────────────────────────────────────────────────────── */
+    .bubble {
+      max-width: 88%;
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .msg-row.user  .bubble {
+      background: var(--white);
+      color: var(--blue);
+      font-weight: 500;
+      border-bottom-right-radius: 3px;
+    }
+    .msg-row.agent .bubble {
+      background: var(--blue-card);
+      border: 1px solid var(--white-12);
+      color: var(--white-90);
+      border-bottom-left-radius: 3px;
+      max-width: 100%;
+      width: 100%;
+    }
+
+    /* ── Section label inside bubble ─────────────────────────────────── */
+    .section-lbl {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; opacity: 0.55; margin-bottom: 7px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .section-lbl::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: 0.2; }
+    .section-lbl.teal   { color: var(--teal); }
+    .section-lbl.amber  { color: var(--amber); }
+    .section-lbl.purple { color: var(--purple); }
+
+    /* ── Analyst text ─────────────────────────────────────────────────── */
+    .analyst-text { font-size: 14px; line-height: 1.7; color: var(--white-90); margin-bottom: 14px; }
+
+    /* ── Data table ───────────────────────────────────────────────────── */
+    .table-wrap {
+      border-radius: var(--radius-sm); border: 1px solid var(--white-12);
+      overflow: hidden; margin-bottom: 12px;
+    }
+    .table-scroll { overflow-x: auto; max-height: 280px; overflow-y: auto; }
+    .table-scroll::-webkit-scrollbar { height: 4px; width: 4px; }
+    .table-scroll::-webkit-scrollbar-thumb { background: var(--white-25); border-radius: 2px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead th {
+      background: var(--blue-card2); padding: 9px 12px;
+      text-align: left; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--white-50); white-space: nowrap;
+      border-bottom: 1px solid var(--white-12);
+      position: sticky; top: 0; z-index: 1;
+      cursor: pointer; user-select: none;
+    }
+    thead th:hover { color: var(--white-80); }
+    thead th .sort-icon { margin-left: 4px; opacity: 0.4; font-size: 9px; }
+    thead th.sorted .sort-icon { opacity: 1; color: var(--teal); }
+    tbody tr { border-bottom: 1px solid var(--white-08); transition: background 0.1s; }
+    tbody tr:hover { background: var(--white-08); }
+    tbody td { padding: 8px 12px; color: var(--white-80); white-space: nowrap; }
+    tbody td.num { text-align: right; font-family: "JetBrains Mono", monospace; color: var(--teal); font-size: 11px; }
+    .table-meta { font-size: 10px; color: var(--white-25); padding: 6px 2px; }
+    .truncated-warning { color: var(--amber); font-size: 11px; margin-top: 2px; }
+
+    /* ── Chart container ──────────────────────────────────────────────── */
+    .chart-wrap {
+      background: rgba(0,0,0,0.25); border: 1px solid var(--white-12);
+      border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 12px;
+      min-height: 280px;
+    }
+    .chart-wrap .plotly-chart { width: 100%; min-height: 280px; }
+
+    /* ── Accordion ────────────────────────────────────────────────────── */
+    .accordion { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .acc-toggle {
+      background: var(--white-04); border: 1px solid var(--white-12);
+      border-radius: var(--radius-sm); padding: 7px 12px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--white-50);
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
+      width: 100%; transition: all 0.15s; font-family: "Barlow", sans-serif;
+    }
+    .acc-toggle:hover { background: var(--white-12); color: var(--white-80); }
+    .acc-arrow { transition: transform 0.2s; font-size: 9px; margin-left: auto; }
+    .acc-toggle.open .acc-arrow { transform: rotate(90deg); }
+    .acc-body {
+      background: var(--white-04); border: 1px solid var(--white-08);
+      border-radius: var(--radius-sm); padding: 12px 14px;
+      font-size: 13px; line-height: 1.6; color: var(--white-80);
+    }
+    .sql-code {
+      background: rgba(0,0,0,0.4); border: 1px solid var(--white-08);
+      border-radius: var(--radius-sm); padding: 12px 14px;
+      font-family: "JetBrains Mono", monospace; font-size: 11.5px;
+      line-height: 1.65; color: var(--teal);
+      white-space: pre-wrap; word-break: break-all; overflow-x: auto;
+    }
+    .sql-kw  { color: var(--amber); }
+    .sql-fn  { color: var(--purple); }
+    .sql-str { color: var(--green); }
+
+    /* ── Thinking indicator ───────────────────────────────────────────── */
+    .thinking { display: flex; align-items: center; gap: 5px; padding: 2px 0; }
+    .thinking-phase { font-size: 11px; color: var(--white-50); margin-left: 4px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--white-50); animation: blink 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+
+    /* ── Error bubble ─────────────────────────────────────────────────── */
+    .bubble.error { background: rgba(255,107,107,0.12); border-color: rgba(255,107,107,0.3); color: #FF9090; }
+
+    /* ── Lead gate card ───────────────────────────────────────────────── */
+    .gate-card {
+      background: var(--blue-card2); border: 1.5px solid var(--white-25);
+      border-radius: var(--radius-lg); padding: 28px 24px;
+      width: 100%; position: relative; overflow: hidden;
+    }
+    .gate-card::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0;
+      height: 3px; background: var(--white);
+    }
+    .gate-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--teal); margin-bottom: 10px; }
+    .gate-title   { font-size: 22px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; }
+    .gate-body    { font-size: 14px; color: var(--white-80); line-height: 1.65; margin-bottom: 22px; }
+    .gate-body em { font-style: italic; font-weight: 300; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .field-wrap { display: flex; flex-direction: column; gap: 5px; }
+    .field-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--white-50); }
+    .field-input {
+      background: var(--white-08); border: 1.5px solid var(--white-25);
+      border-radius: var(--radius-sm); padding: 11px 13px;
+      font-size: 14px; font-family: "Barlow", sans-serif;
+      color: var(--white); outline: none; width: 100%;
+      transition: border-color 0.15s;
+    }
+    .field-input::placeholder { color: var(--white-25); }
+    .field-input:focus { border-color: var(--white-50); }
+    .field-input.err { border-color: var(--red); }
+    .field-err { font-size: 11px; color: var(--red); }
+    .gate-submit {
+      width: 100%; background: var(--white); color: var(--blue);
+      border: none; border-radius: var(--radius-sm); padding: 13px 0;
+      font-size: 13px; font-weight: 700; font-family: "Barlow", sans-serif;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      cursor: pointer; transition: all 0.18s; margin-top: 8px;
+    }
+    .gate-submit:hover:not(:disabled) { background: var(--white-80); transform: translateY(-1px); }
+    .gate-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+    .privacy-note { font-size: 11px; color: var(--white-25); margin-top: 10px; line-height: 1.5; }
+    .gate-success { text-align: center; padding: 8px 0; }
+    .gate-success-icon { font-size: 32px; margin-bottom: 8px; }
+    .gate-success-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .gate-success-body  { font-size: 13px; color: var(--white-80); }
+
+    /* ── Suggestions ──────────────────────────────────────────────────── */
+    .suggestions { padding: 8px 0; }
+    .suggestions-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--white-25); margin-bottom: 8px; }
+    .pills { display: flex; gap: 7px; flex-wrap: wrap; }
+    .pill {
+      background: var(--white-08); border: 1px solid var(--white-25);
+      border-radius: 20px; padding: 6px 13px;
+      font-size: 12px; color: var(--white-80);
+      cursor: pointer; transition: all 0.15s;
+      font-family: "Barlow", sans-serif;
+    }
+    .pill:hover:not(:disabled) { background: var(--white-12); border-color: var(--white-50); color: var(--white); transform: translateY(-1px); }
+    .pill:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* ── Input area ───────────────────────────────────────────────────── */
+    .input-area {
+      border-top: 1px solid var(--white-12);
+      padding: 14px 0 18px;
+      flex-shrink: 0;
+    }
+    .input-row { display: flex; gap: 10px; align-items: flex-end; }
+    .chat-input {
+      flex: 1; background: var(--white-08);
+      border: 1.5px solid var(--white-25); border-radius: var(--radius-md);
+      padding: 12px 14px; font-size: 14px; font-family: "Barlow", sans-serif;
+      color: var(--white); outline: none; resize: none;
+      min-height: 46px; max-height: 130px; line-height: 1.45;
+      transition: border-color 0.15s;
+    }
+    .chat-input::placeholder { color: var(--white-25); }
+    .chat-input:focus { border-color: var(--white-50); }
+    .chat-input:disabled { opacity: 0.5; cursor: not-allowed; }
+    .send-btn {
+      background: var(--white); color: var(--blue); border: none;
+      border-radius: var(--radius-md); width: 46px; height: 46px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    .send-btn:hover:not(:disabled) { background: var(--white-80); transform: translateY(-1px); }
+    .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .input-hint { font-size: 11px; color: var(--white-25); margin-top: 7px; text-align: center; }
+
+    /* ── Fade in ──────────────────────────────────────────────────────── */
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
+
+    /* ── Responsive ───────────────────────────────────────────────────── */
+    @media (max-width: 560px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .bubble { max-width: 95%; }
+      .pills { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONFIG — update both values before deploying
+   ══════════════════════════════════════════════════════════════════════════ */
+const API_BASE        = "https://unimpartial-fredric-nonseparative.ngrok-free.dev";   // ← your FastAPI URL
+const API_KEY         = "3BLkFccCNvWXuHyO5PiVJQlsdVZ_5hbtrZ61u1fBSPNgMzErd";           // ← must match API_KEY in .env
+const FREE_QUERY_LIMIT = 3;
+
+// Helper: standard headers for every API call
+const apiHeaders = () => ({
+  'Content-Type': 'application/json',
+  'X-API-Key':    API_KEY,
+});
+
+const SUGGESTIONS = [
+  "Top 10 customers by revenue",
+  "Which industry has the best margin?",
+  "How are sales reps performing vs targets in 2024?",
+  "Which customers have overdue invoices?",
+  "Best-selling product categories",
+  "Monthly revenue trend for FY2024/25",
+];
+
+/* ── SQL syntax highlighter ─────────────────────────────────────────────── */
+function hlSQL(sql) {
+  const kws = /\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|JOIN|LEFT JOIN|INNER JOIN|ON|AND|OR|AS|BY|TOP|SUM|COUNT|AVG|ROUND|MIN|MAX|ISNULL|NULLIF|DISTINCT|DESC|ASC|HAVING|WITH|YEAR|MONTH|CAST|NULL|NOT|IS|IN|CASE|WHEN|THEN|ELSE|END)\b/g;
+  const strs = /'([^']+)'/g;
+  return sql
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(strs,  (_,s) => `<span class="sql-str">'${s}'</span>`)
+    .replace(kws,   kw    => `<span class="sql-kw">${kw}</span>`);
+}
+
+/* ── isNumeric ──────────────────────────────────────────────────────────── */
+function isNum(v) { return typeof v === 'number' || (typeof v === 'string' && !isNaN(parseFloat(v)) && isFinite(v)); }
+function fmt(v)   {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined,{maximumFractionDigits:2});
+  return String(v);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DataTable — sortable
+   ══════════════════════════════════════════════════════════════════════════ */
+function DataTable({ data }) {
+  const [sortCol, setSortCol]  = useState(null);
+  const [sortDir, setSortDir]  = useState('asc');
+
+  if (!data || !data.rows || data.rows.length === 0) return null;
+
+  const cols = data.columns.map(c => c.name);
+  let rows = [...data.rows];
+
+  if (sortCol !== null) {
+    rows.sort((a,b) => {
+      const av = a[sortCol], bv = b[sortCol];
+      if (av === null) return 1; if (bv === null) return -1;
+      const cmp = isNum(av) && isNum(bv)
+        ? Number(av) - Number(bv)
+        : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  const handleSort = (i) => {
+    if (sortCol === i) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(i); setSortDir('asc'); }
+  };
+
+  return (
+    <div style={{marginBottom:12}}>
+      <div className="table-wrap">
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {cols.map((c,i) => (
+                  <th key={i} className={sortCol===i?'sorted':''} onClick={()=>handleSort(i)}>
+                    {c}
+                    <span className="sort-icon">
+                      {sortCol===i ? (sortDir==='asc'?'▲':'▼') : '⇅'}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row,ri) => (
+                <tr key={ri}>
+                  {row.map((cell,ci) => (
+                    <td key={ci} className={isNum(cell)?'num':''}>{fmt(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="table-meta">
+        {data.row_count} row{data.row_count !== 1 ? 's' : ''}
+        {data.truncated_to && <span className="truncated-warning"> · Limited to {data.truncated_to} rows</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PlotlyChart — renders Plotly JSON via the Plotly.js library
+   ══════════════════════════════════════════════════════════════════════════ */
+function PlotlyChart({ chartJson, msgId }) {
+  const divRef = useRef(null);
+
+  useEffect(() => {
+    if (!chartJson || !divRef.current) return;
+    try {
+      const fig = JSON.parse(chartJson);
+      const layout = {
+        ...fig.layout,
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor:  'rgba(0,0,0,0)',
+        font: { family: 'Barlow, sans-serif', color: 'rgba(255,255,255,0.8)', size: 12 },
+        margin: { t: 36, r: 16, b: 48, l: 48 },
+        legend: { font: { color: 'rgba(255,255,255,0.6)' } },
+        xaxis: { ...(fig.layout?.xaxis||{}), gridcolor:'rgba(255,255,255,0.08)', linecolor:'rgba(255,255,255,0.12)', tickfont:{color:'rgba(255,255,255,0.5)'} },
+        yaxis: { ...(fig.layout?.yaxis||{}), gridcolor:'rgba(255,255,255,0.08)', linecolor:'rgba(255,255,255,0.12)', tickfont:{color:'rgba(255,255,255,0.5)'} },
+        title: fig.layout?.title
+          ? { ...(typeof fig.layout.title === 'string' ? {text:fig.layout.title} : fig.layout.title), font:{color:'rgba(255,255,255,0.7)',size:13} }
+          : undefined,
+      };
+      const config = { responsive: true, displayModeBar: false };
+      window.Plotly.react(divRef.current, fig.data, layout, config);
+    } catch(e) {
+      console.warn('Chart render error:', e);
+    }
+    return () => {
+      if (divRef.current) window.Plotly.purge(divRef.current);
+    };
+  }, [chartJson]);
+
+  return (
+    <div className="chart-wrap" style={{marginBottom:12}}>
+      <div ref={divRef} className="plotly-chart" style={{minHeight:260}}/>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Accordion
+   ══════════════════════════════════════════════════════════════════════════ */
+function Accordion({ label, icon, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button className={`acc-toggle${open?' open':''}`} onClick={()=>setOpen(!open)}>
+        <span>{icon}</span> {label} <span className="acc-arrow">›</span>
+      </button>
+      {open && <div className="acc-body fade-in">{children}</div>}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Thinking indicator
+   ══════════════════════════════════════════════════════════════════════════ */
+const PHASES = {
+  routing:   'Routing intent…',
+  sql:       'SQL Engineer writing query…',
+  explaining:'Explainer translating…',
+  analyst:   'Analyst interpreting data…',
+};
+function Thinking({ phase }) {
+  return (
+    <div className="msg-row agent fade-in">
+      <div className="msg-label">AI Analyst</div>
+      <div className="bubble">
+        <div className="thinking">
+          <div className="dot"/><div className="dot"/><div className="dot"/>
+          <span className="thinking-phase">{PHASES[phase] || 'Thinking…'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AgentMessage
+   ══════════════════════════════════════════════════════════════════════════ */
+function AgentMessage({ msg }) {
+  if (msg.error) {
+    return (
+      <div className="msg-row agent fade-in">
+        <div className="msg-label">AI Analyst</div>
+        <div className="bubble error">{msg.error}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="msg-row agent fade-in">
+      <div className="msg-label">AI Analyst</div>
+      <div className="bubble">
+        {msg.analyst && (
+          <>
+            <div className="section-lbl teal">Analysis</div>
+            <div className="analyst-text">{msg.analyst}</div>
+          </>
+        )}
+        {msg.chart_json && <PlotlyChart chartJson={msg.chart_json} msgId={msg.id}/>}
+        {msg.data && msg.data.rows && msg.data.rows.length > 0 && (
+          <>
+            <div className="section-lbl amber">Results</div>
+            <DataTable data={msg.data}/>
+          </>
+        )}
+        {(msg.sql || msg.explanation) && (
+          <div className="accordion">
+            {msg.explanation && (
+              <Accordion label="Query Explanation" icon="📋">
+                {msg.explanation}
+              </Accordion>
+            )}
+            {msg.sql && (
+              <Accordion label="View SQL Query" icon="⟨/⟩">
+                <div className="sql-code" dangerouslySetInnerHTML={{__html: hlSQL(msg.sql)}}/>
+              </Accordion>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LeadGateCard
+   ══════════════════════════════════════════════════════════════════════════ */
+function LeadGateCard({ sessionId, onSuccess }) {
+  const [fields,   setFields]   = useState({ firstName:'', lastName:'', company:'', jobTitle:'', email:'' });
+  const [errors,   setErrors]   = useState({});
+  const [busy,     setBusy]     = useState(false);
+  const [done,     setDone]     = useState(false);
+
+  const set = (k,v) => setFields(f => ({...f, [k]:v}));
+
+  const validate = () => {
+    const e = {};
+    if (!fields.firstName.trim()) e.firstName = 'Required';
+    if (!fields.lastName.trim())  e.lastName  = 'Required';
+    if (!fields.company.trim())   e.company   = 'Required';
+    if (!fields.jobTitle.trim())  e.jobTitle  = 'Required';
+    if (!fields.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) e.email = 'Valid email required';
+    return e;
+  };
+
+  const handleSubmit = async () => {
+    const e = validate();
+    if (Object.keys(e).length > 0) { setErrors(e); return; }
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/lead`, {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          session_id: sessionId,
+          first_name: fields.firstName,
+          last_name:  fields.lastName,
+          company:    fields.company,
+          job_title:  fields.jobTitle,
+          email:      fields.email,
+        })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setDone(true);
+      setTimeout(() => onSuccess(fields.firstName), 1200);
+    } catch(err) {
+      setErrors({ submit: 'Submission failed. Please try again.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <div className="msg-row agent fade-in">
+        <div className="msg-label">AI Analyst</div>
+        <div className="gate-card">
+          <div className="gate-success">
+            <div className="gate-success-icon">✓</div>
+            <div className="gate-success-title">You're all set</div>
+            <div className="gate-success-body">Sending your query now…</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const Field = ({ id, label, placeholder, type='text', full=false }) => (
+    <div className={`field-wrap${full?' full':''}`}>
+      <label className="field-label">{label}</label>
+      <input
+        className={`field-input${errors[id]?' err':''}`}
+        type={type} placeholder={placeholder}
+        value={fields[id]} onChange={e=>{ set(id,e.target.value); setErrors(er=>({...er,[id]:null})); }}
+        onKeyDown={e=>{ if(e.key==='Enter') handleSubmit(); }}
+      />
+      {errors[id] && <span className="field-err">{errors[id]}</span>}
+    </div>
+  );
+
+  return (
+    <div className="msg-row agent fade-in">
+      <div className="msg-label">AI Analyst</div>
+      <div className="gate-card">
+        <div className="gate-eyebrow">Continue your analysis</div>
+        <div className="gate-title">You've used your 3 free queries</div>
+        <div className="gate-body">
+          Tell us who you are to keep going. Your data stays yours —
+          <em> we just want to know who's interested so we can follow up.</em>
+        </div>
+        <div className="form-grid">
+          <Field id="firstName" label="First name"  placeholder="Jane"/>
+          <Field id="lastName"  label="Last name"   placeholder="Smith"/>
+          <Field id="company"   label="Company"     placeholder="Acme Ltd"/>
+          <Field id="jobTitle"  label="Job title"   placeholder="Operations Director"/>
+          <Field id="email"     label="Work email"  placeholder="jane@acme.com" type="email" full={true}/>
+        </div>
+        {errors.submit && <div className="field-err" style={{marginBottom:8}}>{errors.submit}</div>}
+        <button className="gate-submit" onClick={handleSubmit} disabled={busy}>
+          {busy ? 'Sending…' : 'Continue querying'}
+        </button>
+        <p className="privacy-note">
+          Your details will only be used by Triangle to follow up on your results.
+          We will not share them with third parties or add you to a mailing list without your permission.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Logo
+   ══════════════════════════════════════════════════════════════════════════ */
+function Logo({ size=28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <rect width="32" height="32" rx="7" fill="white" fillOpacity="0.12"/>
+      <polygon points="16,6 28,26 4,26" fill="none" stroke="white" strokeWidth="2.2" strokeLinejoin="round"/>
+      <circle cx="16" cy="21" r="2" fill="white" opacity="0.7"/>
+    </svg>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Main App
+   ══════════════════════════════════════════════════════════════════════════ */
+let msgCounter = 0;
+const uid = () => ++msgCounter;
+
+function App() {
+  const [sessionId,    setSessionId]    = useState(null);
+  const [messages,     setMessages]     = useState([]);   // {id, type, text?, ...}
+  const [inputVal,     setInputVal]     = useState('');
+  const [busy,         setBusy]         = useState(false);
+  const [phase,        setPhase]        = useState(null);
+  const [queryCount,   setQueryCount]   = useState(0);
+  const [gatePending,  setGatePending]  = useState(false);  // gate is showing
+  const [pendingMsg,   setPendingMsg]   = useState(null);   // stashed query after gate
+  const [leadCaptured, setLeadCaptured] = useState(false);
+
+  const feedRef  = useRef(null);
+  const inputRef = useRef(null);
+
+  // Scroll to bottom whenever messages change
+  useEffect(() => {
+    if (feedRef.current) {
+      feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    }
+  }, [messages, phase]);
+
+  // Create session on mount
+  useEffect(() => {
+    const stored = sessionStorage.getItem('nl2sql_session');
+    if (stored) {
+      setSessionId(stored);
+      const count = parseInt(sessionStorage.getItem('nl2sql_count') || '0', 10);
+      setQueryCount(count);
+      const lead  = sessionStorage.getItem('nl2sql_lead') === 'true';
+      setLeadCaptured(lead);
+    } else {
+      fetch(`${API_BASE}/session`, { method: 'POST', headers: apiHeaders() })
+        .then(r => r.json())
+        .then(d => {
+          sessionStorage.setItem('nl2sql_session', d.session_id);
+          sessionStorage.setItem('nl2sql_count', '0');
+          setSessionId(d.session_id);
+        })
+        .catch(() => {
+          // fallback — generate client-side session ID
+          const id = 'local-' + Math.random().toString(36).slice(2);
+          sessionStorage.setItem('nl2sql_session', id);
+          setSessionId(id);
+        });
+    }
+  }, []);
+
+  const addMessage = (msg) => setMessages(m => [...m, msg]);
+
+  const runQuery = useCallback(async (text, sid) => {
+    if (!text.trim() || busy) return;
+    const sId = sid || sessionId;
+    if (!sId) return;
+
+    setInputVal('');
+    setBusy(true);
+    addMessage({ id: uid(), type: 'user', text });
+
+    // Simulate phase progression visually
+    setPhase('routing');
+    await new Promise(r => setTimeout(r, 500));
+    setPhase('sql');
+
+    let resp;
+    try {
+      const res = await fetch(`${API_BASE}/query`, {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({ session_id: sId, message: text })
+      });
+      resp = await res.json();
+    } catch (err) {
+      setPhase(null);
+      setBusy(false);
+      addMessage({ id: uid(), type: 'agent', error: 'Network error — could not reach the API. Please check your connection.' });
+      return;
+    }
+
+    if (resp.status === 'gate') {
+      setPhase(null);
+      setBusy(false);
+      setGatePending(true);
+      setPendingMsg(text);
+      addMessage({ id: uid(), type: 'gate' });
+      return;
+    }
+
+    setPhase('explaining');
+    await new Promise(r => setTimeout(r, 300));
+    setPhase('analyst');
+    await new Promise(r => setTimeout(r, 400));
+    setPhase(null);
+
+    const newCount = resp.query_count ?? queryCount + 1;
+    setQueryCount(newCount);
+    sessionStorage.setItem('nl2sql_count', String(newCount));
+
+    if (resp.status === 'error') {
+      addMessage({ id: uid(), type: 'agent', error: resp.error || 'An unexpected error occurred.' });
+    } else {
+      addMessage({
+        id:          uid(),
+        type:        'agent',
+        analyst:     resp.analyst,
+        sql:         resp.sql,
+        explanation: resp.explanation,
+        data:        resp.data,
+        chart_json:  resp.chart_json,
+      });
+    }
+
+    setBusy(false);
+  }, [busy, sessionId, queryCount]);
+
+  const handleSend = () => runQuery(inputVal);
+  const handleKey  = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  };
+
+  const handleLeadSuccess = (firstName) => {
+    setLeadCaptured(true);
+    setGatePending(false);
+    sessionStorage.setItem('nl2sql_lead', 'true');
+    addMessage({ id: uid(), type: 'agent', analyst: `Welcome, ${firstName}! Picking up where you left off…` });
+    if (pendingMsg) {
+      const msg = pendingMsg;
+      setPendingMsg(null);
+      setTimeout(() => runQuery(msg), 800);
+    }
+  };
+
+  const isInputDisabled = busy || gatePending || !sessionId;
+  const nearLimit = queryCount >= FREE_QUERY_LIMIT - 1 && !leadCaptured;
+
+  return (
+    <div className="app-layout">
+      {/* ── Top bar ── */}
+      <div className="topbar">
+        <div className="topbar-logo">
+          <Logo size={26}/>
+          <span className="logo-name">Triangle</span>
+        </div>
+        <span className="topbar-title">AI Data Analyst</span>
+        <div className="topbar-right">
+          {!leadCaptured && (
+            <span className={`query-counter${nearLimit?' near-limit':''}`}>
+              {Math.max(0, FREE_QUERY_LIMIT - queryCount)} free {FREE_QUERY_LIMIT - queryCount === 1 ? 'query' : 'queries'} left
+            </span>
+          )}
+          <div className="status-dot" title="Connected"/>
+        </div>
+      </div>
+
+      {/* ── Message feed ── */}
+      <div className="feed" ref={feedRef}>
+        {messages.length === 0 && !phase && (
+          <div className="empty-state fade-in">
+            <div className="empty-icon">⬡</div>
+            <div className="empty-title">Ask anything about your data</div>
+            <div className="empty-body">
+              Type a question in plain English. The AI will write the SQL,
+              run it, and explain the results — no database knowledge needed.
+            </div>
+          </div>
+        )}
+
+        {messages.map(msg => {
+          if (msg.type === 'user') {
+            return (
+              <div key={msg.id} className="msg-row user fade-in">
+                <div className="msg-label">You</div>
+                <div className="bubble">{msg.text}</div>
+              </div>
+            );
+          }
+          if (msg.type === 'gate') {
+            return <LeadGateCard key={msg.id} sessionId={sessionId} onSuccess={handleLeadSuccess}/>;
+          }
+          return <AgentMessage key={msg.id} msg={msg}/>;
+        })}
+
+        {phase && <Thinking phase={phase}/>}
+        <div ref={el => { if(el) el.scrollIntoView({behavior:'smooth'}); }}/>
+      </div>
+
+      {/* ── Suggestions (only when feed is short) ── */}
+      {messages.length < 3 && !gatePending && (
+        <div className="suggestions">
+          <div className="suggestions-label">Try asking</div>
+          <div className="pills">
+            {SUGGESTIONS.map((s,i) => (
+              <button key={i} className="pill" disabled={isInputDisabled}
+                onClick={() => runQuery(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Input ── */}
+      <div className="input-area">
+        <div className="input-row">
+          <textarea
+            ref={inputRef}
+            className="chat-input"
+            placeholder={gatePending ? 'Please complete the form above to continue…' : 'Ask a question about revenue, customers, products, targets…'}
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={handleKey}
+            disabled={isInputDisabled}
+            rows={1}
+          />
+          <button className="send-btn" disabled={isInputDisabled || !inputVal.trim()} onClick={handleSend}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <div className="input-hint">
+          Results are generated by AI and may not be 100% accurate. Always verify critical figures.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
